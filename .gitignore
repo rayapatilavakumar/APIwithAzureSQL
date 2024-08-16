@@ -1,0 +1,17 @@
+# Visual Studio Code
+.vscode/
+
+# Visual Studio
+*.suo
+*.cache
+*.log
+*.user
+*.vs
+
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Other
+*.exe
+*.dll
