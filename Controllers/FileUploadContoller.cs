@@ -9,6 +9,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
+using Azure.Storage.Queues;
 
 namespace AzureSQLDBConnectionAPI.Controllers;
 
@@ -17,33 +18,39 @@ namespace AzureSQLDBConnectionAPI.Controllers;
 [ApiController]
 public class FileUploadController : ControllerBase
 {
-    private readonly BlobServiceClient _blobServiceClient;
+    private BlobServiceClient _blobServiceClient;
     private readonly string _containerName; // Name of your Azure Blob Storage container
+    private readonly QueueServiceClient queueServiceClient;
+    private readonly SecretClient secretClient;
 
-    public FileUploadController(IConfiguration configuration)
+    public FileUploadController(IConfiguration configuration, QueueServiceClient queueServiceClient, SecretClient secretClient)
     {
+
+
+        //try
+        //{
+        //    // Use Azure Managed Identity to authenticate and retrieve secrets from Key Vault
+        //    var credential = new DefaultAzureCredential();
+        //    var keyVaultUrl = "https://rlkvalut.vault.azure.net/"; // Replace with your Key Vault URL
+
+        //    var secretClient = new SecretClient(new Uri(keyVaultUrl), credential);
+
+        //    // Retrieve the Azure Blob Storage connection string from Key Vault
+        //    var secretName = "StorageConnectionString"; // Replace with your secret name
+        //    var secretResponse = secretClient.GetSecret(secretName);
+
+        //    // Initialize BlobServiceClient using the retrieved connection string
+        //    _blobServiceClient = new BlobServiceClient(secretResponse.Value.Value);
+        //}
+        //catch (Exception ex)
+        //{
+        //    throw new ApplicationException($"Error retrieving Azure Blob Storage connection string: {ex.Message}");
+        //}
         // Retrieve container name from app settings or hardcode it here
+
         _containerName = "rlkblobc1";
-
-        try
-        {
-            // Use Azure Managed Identity to authenticate and retrieve secrets from Key Vault
-            var credential = new DefaultAzureCredential();
-            var keyVaultUrl = "https://rlkvalut.vault.azure.net/"; // Replace with your Key Vault URL
-
-            var secretClient = new SecretClient(new Uri(keyVaultUrl), credential);
-
-            // Retrieve the Azure Blob Storage connection string from Key Vault
-            var secretName = "StorageConnectionString"; // Replace with your secret name
-            var secretResponse = secretClient.GetSecret(secretName);
-
-            // Initialize BlobServiceClient using the retrieved connection string
-            _blobServiceClient = new BlobServiceClient(secretResponse.Value.Value);
-        }
-        catch (Exception ex)
-        {
-            throw new ApplicationException($"Error retrieving Azure Blob Storage connection string: {ex.Message}");
-        }
+        this.queueServiceClient = queueServiceClient;
+        this.secretClient = secretClient;
     }
 
     [HttpPost("upload")]
@@ -56,6 +63,13 @@ public class FileUploadController : ControllerBase
 
         try
         {
+
+            var secretName = "StorageConnectionString"; // Replace with your secret name
+            var secretResponse = secretClient.GetSecret(secretName);
+
+            // Initialize BlobServiceClient using the retrieved connection string
+            _blobServiceClient = new BlobServiceClient(secretResponse.Value.Value);
+
             // Get a reference to a blob container
             BlobContainerClient containerClient = _blobServiceClient.GetBlobContainerClient(_containerName);
 
@@ -75,6 +89,13 @@ public class FileUploadController : ControllerBase
 
             // Optionally, you can return the URL of the uploaded blob
             string blobUrl = blobClient.Uri.AbsoluteUri;
+
+            var queueClient = queueServiceClient.GetQueueClient("rlk-storagequeue");
+
+            await queueClient.CreateIfNotExistsAsync();
+
+            await queueClient.SendMessageAsync(blobUrl);
+
             return Ok(new { FileUrl = blobUrl });
         }
         catch (Exception ex)
